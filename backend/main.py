@@ -1,21 +1,32 @@
- ## backend/main.py
+# backend/main.py
 
-```python
+import json
 import json
 import boto3
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 from agent.graph import ESGWorkflow
 from db.models import EvidenceItem
 import os
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ESG Insight Hub API", version="1.0.0")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # AWS clients
 stepfunctions = boto3.client('stepfunctions')
@@ -34,10 +45,74 @@ class HealthResponse(BaseModel):
     status: str
     version: str
 
+class ComplianceMetrics(BaseModel):
+    environmental: int
+    social: int
+    governance: int
+    reporting: int
+
+class Alert(BaseModel):
+    id: int
+    type: str
+    title: str
+    message: str
+    time: str
+    priority: str
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
     return HealthResponse(status="healthy", version="1.0.0")
+
+@app.get("/api/dashboard/metrics")
+async def get_dashboard_metrics():
+    """Get dashboard key metrics"""
+    return {
+        "compliance_score": 87,
+        "documents_processed": 156,
+        "alerts_count": 3,
+        "gaps_identified": 12
+    }
+
+@app.get("/api/compliance/metrics", response_model=ComplianceMetrics)
+async def get_compliance_metrics():
+    """Get CSRD compliance metrics"""
+    return ComplianceMetrics(
+        environmental=85,
+        social=72,
+        governance=91,
+        reporting=78
+    )
+
+@app.get("/api/alerts", response_model=List[Alert])
+async def get_alerts():
+    """Get current alerts"""
+    return [
+        Alert(
+            id=1,
+            type="warning",
+            title="ESRS E2 Compliance Gap",
+            message="Pollution metrics missing for Q3 2024",
+            time="2 hours ago",
+            priority="High"
+        ),
+        Alert(
+            id=2,
+            type="error",
+            title="Document Expiry Alert",
+            message="Sustainability report expires in 15 days",
+            time="1 day ago",
+            priority="Critical"
+        ),
+        Alert(
+            id=3,
+            type="info",
+            title="New CSRD Requirement",
+            message="ESRS S2 implementation due next month",
+            time="3 days ago",
+            priority="Medium"
+        )
+    ]
 
 @app.post("/v1/evidence")
 async def process_evidence(request: EvidenceRequest, background_tasks: BackgroundTasks):
